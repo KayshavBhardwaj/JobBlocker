@@ -118,29 +118,28 @@ function initCensoring() {
 
     // Store original text if not already stored
     if (node.parentNode && !node.parentNode.hasAttribute('data-original-text')) {
-      node.parentNode.setAttribute('data-original-text', original);
     }
 
     const updated = original.replace(censorRE, m => {
       // Find the matching key in a case-insensitive way
-      const key = Object.keys(CENSORS).find(k => 
-        k.toLowerCase() === m.toLowerCase() || 
+      const key = Object.keys(CENSORS).find(k =>
+        k.toLowerCase() === m.toLowerCase() ||
         (k.includes(' ') && m.toLowerCase().match(new RegExp(k.toLowerCase().replace(/\s+/g, '\\s+'), 'i')))
       );
-      
+
       if (!key) return m; // Shouldn't happen, but just in case
-      
+
       const masked = CENSORS[key];
-  
+
       /* keep rough capitalization style */
       if (m === m.toUpperCase())            return masked.toUpperCase();      // JOB → J*B
       if (m[0] === m[0].toUpperCase())      return masked[0].toUpperCase() + masked.slice(1); // Job → J*b
       return masked;                        // job → j*b
     });
-  
+
     if (updated !== original) node.textContent = updated;
   }
-  
+
   /* walk tree and censor all text nodes under a root */
   function walk(root) {
     const walker = document.createTreeWalker(
@@ -154,60 +153,56 @@ function initCensoring() {
     );
     for (let n; (n = walker.nextNode()); ) censorNode(n);
   }
-  
+
   /* initial sweep */
   walk(document.body);
-  
+
   /* Specifically handle Google search inputs */
   function handleGoogleSearch() {
     // For the main search input
     const searchInputs = document.querySelectorAll('input[name="q"], input[type="search"]');
     searchInputs.forEach(input => {
       // Store original value if not already stored
-      if (!input.hasAttribute('data-original-value')) {
-        input.setAttribute('data-original-value', input.value);
-      }
-      
       // Censor the current value
       const original = input.value;
       const updated = original.replace(censorRE, m => {
         // Find the matching key in a case-insensitive way
-        const key = Object.keys(CENSORS).find(k => 
-          k.toLowerCase() === m.toLowerCase() || 
+        const key = Object.keys(CENSORS).find(k =>
+          k.toLowerCase() === m.toLowerCase() ||
           (k.includes(' ') && m.toLowerCase().match(new RegExp(k.toLowerCase().replace(/\s+/g, '\\s+'), 'i')))
         );
-        
+
         if (!key) return m; // Shouldn't happen, but just in case
-        
+
         const masked = CENSORS[key];
-        
+
         if (m === m.toUpperCase()) return masked.toUpperCase();
         if (m[0] === m[0].toUpperCase()) return masked[0].toUpperCase() + masked.slice(1);
         return masked;
       });
-      
+
       if (updated !== original) input.value = updated;
-      
+
       // Add event listener to censor as user types
       if (!input.hasAttribute('data-censor-listener')) {
         input.addEventListener('input', function() {
           const currentValue = this.value;
           const censoredValue = currentValue.replace(censorRE, m => {
             // Find the matching key in a case-insensitive way
-            const key = Object.keys(CENSORS).find(k => 
-              k.toLowerCase() === m.toLowerCase() || 
+            const key = Object.keys(CENSORS).find(k =>
+              k.toLowerCase() === m.toLowerCase() ||
               (k.includes(' ') && m.toLowerCase().match(new RegExp(k.toLowerCase().replace(/\s+/g, '\\s+'), 'i')))
             );
-            
+
             if (!key) return m; // Shouldn't happen, but just in case
-            
+
             const masked = CENSORS[key];
-            
+
             if (m === m.toUpperCase()) return masked.toUpperCase();
             if (m[0] === m[0].toUpperCase()) return masked[0].toUpperCase() + masked.slice(1);
             return masked;
           });
-          
+
           if (censoredValue !== currentValue) {
             // Save cursor position
             const cursorPos = this.selectionStart;
@@ -219,7 +214,7 @@ function initCensoring() {
         input.setAttribute('data-censor-listener', 'true');
       }
     });
-    
+
     // For search suggestions and results
     const observer = new MutationObserver(mutations => {
       mutations.forEach(mutation => {
@@ -227,31 +222,28 @@ function initCensoring() {
           // Check for search suggestions
           const suggestions = document.querySelectorAll('.sbct, .aypzV, .wM6W7d, .erkvQe, .OBMEnb li');
           suggestions.forEach(suggestion => walk(suggestion));
-          
+
           // Also check for search results
           const results = document.querySelectorAll('#search, #rso, .g');
           results.forEach(result => walk(result));
         }
       });
     });
-    
+
     // Observe the search results and suggestions containers
     const searchContainers = document.querySelectorAll('#search, .UUbT9, .aajZCb, .OBMEnb');
     searchContainers.forEach(container => {
       if (container) {
-        observer.observe(container, { childList: true, subtree: true });
       }
     });
+
   }
-  
-  // Run Google search handling if we're on Google
+
   if (window.location.hostname.includes('google')) {
     handleGoogleSearch();
-    // Also run it periodically to catch dynamic content
     setInterval(handleGoogleSearch, 1000);
   }
-  
-  /* keep up with dynamically‑added content (SPAs, infinite scroll, etc.) */
+
   if (!window._censorObserver) {
     window._censorObserver = new MutationObserver(muts => {
       muts.forEach(mut => {
@@ -259,15 +251,17 @@ function initCensoring() {
           if (node.nodeType === Node.TEXT_NODE) {
             censorNode(node);
           } else {
-            walk(node);
-            
-            // If we're on Google, also handle search inputs in the new nodes
-            if (window.location.hostname.includes('google')) {
-              const searchInputs = node.querySelectorAll ? 
-                node.querySelectorAll('input[name="q"], input[type="search"]') : [];
-              if (searchInputs.length > 0) {
-                handleGoogleSearch();
-              }
+            if (node.nodeType === Node.ELEMENT_NODE) {
+                 walk(node);
+
+                 // If we're on Google, also handle search inputs in the new nodes
+                 if (window.location.hostname.includes('google')) {
+                   const searchInputs = node.querySelectorAll ?
+                       node.querySelectorAll('input[name="q"], input[type="search"]') : [];
+                   if (searchInputs.length > 0) {
+                       handleGoogleSearch(); // This re-processes all search inputs on the page, including new ones.
+                   }
+                 }
             }
           }
         });
@@ -276,4 +270,3 @@ function initCensoring() {
     window._censorObserver.observe(document.body, { childList: true, subtree: true });
   }
 }
-  

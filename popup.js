@@ -18,21 +18,27 @@ document.addEventListener('DOMContentLoaded', function() {
     censorButton.addEventListener('click', function() {
         // Enable censoring and store the state
         chrome.storage.local.set({censoringEnabled: true}, function() {
-            // Execute content script on the current tab
+            // Execute content script function on the current tab
+            // This works with 'activeTab' permission when triggered by user action
             chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-                chrome.scripting.executeScript({
-                    target: {tabId: tabs[0].id},
-                    function: performCensoring
-                });
-                
-                // Update button states
-                censorButton.disabled = true;
-                censorButton.textContent = "Censoring Active";
-                disableButton.disabled = false;
-                
-                // Show refresh message
-                statusMessage.textContent = "Please refresh the page for full effect.";
-                statusMessage.style.color = "#4285f4";
+                if (tabs && tabs[0]) {
+                    chrome.scripting.executeScript({
+                        target: {tabId: tabs[0].id},
+                        function: performCensoring
+                    });
+                    
+                    // Update button states
+                    censorButton.disabled = true;
+                    censorButton.textContent = "Censoring Active";
+                    disableButton.disabled = false;
+                    
+                    // Show refresh message
+                    statusMessage.textContent = "Please refresh the page for full effect.";
+                    statusMessage.style.color = "#4285f4";
+                } else {
+                    statusMessage.textContent = "Could not find active tab.";
+                    statusMessage.style.color = "#ea4335";
+                }
             });
         });
     });
@@ -40,21 +46,26 @@ document.addEventListener('DOMContentLoaded', function() {
     disableButton.addEventListener('click', function() {
         // Disable censoring and store the state
         chrome.storage.local.set({censoringEnabled: false}, function() {
-            // Execute content script on the current tab to disable censoring
-            chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-                chrome.scripting.executeScript({
-                    target: {tabId: tabs[0].id},
-                    function: disableCensoring
-                });
-                
-                // Update button states
-                censorButton.disabled = false;
-                censorButton.textContent = "Censor Words";
-                disableButton.disabled = true;
-                
-                // Show refresh message
-                statusMessage.textContent = "Please refresh the page for full effect.";
-                statusMessage.style.color = "#ea4335";
+            // Execute content script function on the current tab to disable censoring
+             chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+                 if (tabs && tabs[0]) {
+                    chrome.scripting.executeScript({
+                        target: {tabId: tabs[0].id},
+                        function: disableCensoring
+                    });
+                    
+                    // Update button states
+                    censorButton.disabled = false;
+                    censorButton.textContent = "Censor Words";
+                    disableButton.disabled = true;
+                    
+                    // Show refresh message
+                    statusMessage.textContent = "Please refresh the page for full effect.";
+                    statusMessage.style.color = "#ea4335";
+                } else {
+                    statusMessage.textContent = "Could not find active tab.";
+                    statusMessage.style.color = "#ea4335";
+                }
             });
         });
     });
@@ -79,7 +90,7 @@ function performCensoring() {
         vocation: 'voc*tion',
         posting: 'p*sting',
         opportunity: 'opport*nity',
-        
+
         // Application/Process
         application: 'appl*cation',
         apply: 'app*y',
@@ -96,7 +107,7 @@ function performCensoring() {
         register: 'reg*ster',
         enrollment: 'enr*llment',
         candidate: 'cand*date',
-        
+
         // Hiring/Recruitment
         hiring: 'h*ring',
         recruiter: 'recr*iter',
@@ -112,7 +123,7 @@ function performCensoring() {
         onboarding: 'onb*arding',
         selection: 'sel*ction',
         shortlist: 'sh*rtlist',
-        
+
         // Company/Employer Side
         employer: 'empl*yer',
         company: 'comp*ny',
@@ -126,7 +137,7 @@ function performCensoring() {
         office: 'off*ce',
         staff: 'st*ff',
         team: 't*am',
-        
+
         // Employment Types
         "full-time": 'f*ll-time',
         "part-time": 'p*rt-time',
@@ -138,7 +149,7 @@ function performCensoring() {
         consultant: 'cons*ltant',
         remote: 'rem*te',
         "in-person": 'in-p*rson',
-        
+
         // Compensation/Benefits
         salary: 'sal*ry',
         pay: 'p*y',
@@ -151,7 +162,7 @@ function performCensoring() {
         "401k": '4*1k',
         insurance: 'ins*rance',
         bonus: 'bon*s',
-        
+
         // Job Boards / Portals
         linkedin: 'link*din',
         indeed: 'ind*ed',
@@ -164,41 +175,31 @@ function performCensoring() {
         greenhouse: 'greenh*use',
         "apply now": 'app*y n*w'
     };
-    
+
     /* one case‑insensitive, whole‑word regex for all targets */
     const censorRE = new RegExp('\\b(' + Object.keys(CENSORS).join('|').replace(/\s+/g, '\\s+') + ')\\b', 'gi');
-    
+
     /* replace text inside a single Text node */
     function censorNode(node) {
         const original = node.textContent;
-        
-        // Store original text if not already stored
-        if (!node.hasAttribute('data-original-text')) {
-            node.setAttribute('data-original-text', original);
-        }
-        
+        // Removed flawed data-original-text storage
         const updated = original.replace(censorRE, m => {
-            // Find the matching key in a case-insensitive way
-            const key = Object.keys(CENSORS).find(k => 
-                k.toLowerCase() === m.toLowerCase() || 
+            const key = Object.keys(CENSORS).find(k =>
+                k.toLowerCase() === m.toLowerCase() ||
                 (k.includes(' ') && m.toLowerCase().match(new RegExp(k.toLowerCase().replace(/\s+/g, '\\s+'), 'i')))
             );
-            
-            if (!key) return m; // Shouldn't happen, but just in case
-            
+            if (!key) return m;
             const masked = CENSORS[key];
-            
-            /* keep rough capitalization style */
-            if (m === m.toUpperCase()) return masked.toUpperCase();      // JOB → J*B
-            if (m[0] === m[0].toUpperCase()) return masked[0].toUpperCase() + masked.slice(1); // Job → J*b
-            return masked;                        // job → j*b
+            if (m === m.toUpperCase()) return masked.toUpperCase();
+            if (m[0] === m[0].toUpperCase()) return masked[0].toUpperCase() + masked.slice(1);
+            return masked;
         });
-        
         if (updated !== original) node.textContent = updated;
     }
-    
+
     /* walk tree and censor all text nodes under a root */
     function walk(root) {
+        if (!root) return; // Prevent errors if root is null/undefined
         const walker = document.createTreeWalker(
             root,
             NodeFilter.SHOW_TEXT,
@@ -210,62 +211,44 @@ function performCensoring() {
         );
         for (let n; (n = walker.nextNode()); ) censorNode(n);
     }
-    
+
     /* Specifically handle Google search inputs */
     function handleGoogleSearch() {
-        // For the main search input
         const searchInputs = document.querySelectorAll('input[name="q"], input[type="search"]');
         searchInputs.forEach(input => {
-            // Store original value if not already stored
-            if (!input.hasAttribute('data-original-value')) {
-                input.setAttribute('data-original-value', input.value);
-            }
-            
-            // Censor the current value
+             // Removed flawed data-original-value storage
             const original = input.value;
             const updated = original.replace(censorRE, m => {
-                // Find the matching key in a case-insensitive way
-                const key = Object.keys(CENSORS).find(k => 
-                    k.toLowerCase() === m.toLowerCase() || 
+                 const key = Object.keys(CENSORS).find(k =>
+                    k.toLowerCase() === m.toLowerCase() ||
                     (k.includes(' ') && m.toLowerCase().match(new RegExp(k.toLowerCase().replace(/\s+/g, '\\s+'), 'i')))
-                );
-                
-                if (!key) return m; // Shouldn't happen, but just in case
-                
-                const masked = CENSORS[key];
-                
-                if (m === m.toUpperCase()) return masked.toUpperCase();
-                if (m[0] === m[0].toUpperCase()) return masked[0].toUpperCase() + masked.slice(1);
-                return masked;
+                 );
+                 if (!key) return m;
+                 const masked = CENSORS[key];
+                 if (m === m.toUpperCase()) return masked.toUpperCase();
+                 if (m[0] === m[0].toUpperCase()) return masked[0].toUpperCase() + masked.slice(1);
+                 return masked;
             });
-            
+
             if (updated !== original) input.value = updated;
-            
-            // Add event listener to censor as user types
+
             if (!input.hasAttribute('data-censor-listener')) {
                 input.addEventListener('input', function() {
                     const currentValue = this.value;
                     const censoredValue = currentValue.replace(censorRE, m => {
-                        // Find the matching key in a case-insensitive way
-                        const key = Object.keys(CENSORS).find(k => 
-                            k.toLowerCase() === m.toLowerCase() || 
+                         const key = Object.keys(CENSORS).find(k =>
+                            k.toLowerCase() === m.toLowerCase() ||
                             (k.includes(' ') && m.toLowerCase().match(new RegExp(k.toLowerCase().replace(/\s+/g, '\\s+'), 'i')))
-                        );
-                        
-                        if (!key) return m; // Shouldn't happen, but just in case
-                        
-                        const masked = CENSORS[key];
-                        
-                        if (m === m.toUpperCase()) return masked.toUpperCase();
-                        if (m[0] === m[0].toUpperCase()) return masked[0].toUpperCase() + masked.slice(1);
-                        return masked;
+                         );
+                         if (!key) return m;
+                         const masked = CENSORS[key];
+                         if (m === m.toUpperCase()) return masked.toUpperCase();
+                         if (m[0] === m[0].toUpperCase()) return masked[0].toUpperCase() + masked.slice(1);
+                         return masked;
                     });
-                    
                     if (censoredValue !== currentValue) {
-                        // Save cursor position
                         const cursorPos = this.selectionStart;
                         this.value = censoredValue;
-                        // Restore cursor position
                         this.setSelectionRange(cursorPos, cursorPos);
                     }
                 });
@@ -273,100 +256,81 @@ function performCensoring() {
             }
         });
     }
-    
+
     /* perform censoring on the page */
     walk(document.body);
-    
+
     // Handle Google search if on Google
     if (window.location.hostname.includes('google')) {
         handleGoogleSearch();
     }
-    
+
     /* keep up with dynamically‑added content (SPAs, infinite scroll, etc.) */
+    // Ensure the observer is only created once
     if (!window._censorObserver) {
         window._censorObserver = new MutationObserver(muts => {
             muts.forEach(mut => {
                 mut.addedNodes.forEach(node => {
+                    // Process text nodes or walk element subtrees
                     if (node.nodeType === Node.TEXT_NODE) {
-                        censorNode(node);
-                    } else {
-                        walk(node);
-                        
-                        // If we're on Google, also handle search inputs in the new nodes
-                        if (window.location.hostname.includes('google')) {
-                            const searchInputs = node.querySelectorAll ? 
-                                node.querySelectorAll('input[name="q"], input[type="search"]') : [];
-                            if (searchInputs.length > 0) {
-                                handleGoogleSearch();
-                            }
-                        }
+                         censorNode(node);
+                    } else if (node.nodeType === Node.ELEMENT_NODE) { // Only process elements
+                         walk(node);
+                         // Re-run Google handling for any new elements that might contain inputs
+                         if (window.location.hostname.includes('google')) {
+                             handleGoogleSearch();
+                         }
                     }
                 });
             });
         });
+         // Start observing the body for changes
         window._censorObserver.observe(document.body, { childList: true, subtree: true });
     }
     
-    return "Censoring complete and enabled for all pages!";
+    return "Censoring initiated."; // Return something for executeScript callback if needed
 }
 
 // Function that will be injected into the page to disable censoring
 function disableCensoring() {
-    /* walk tree and restore all text nodes under a root */
-    function walk(root) {
+    // Attempt to restore text nodes (won't work without stored original text)
+    function walkAndRestore(root) {
+         if (!root) return;
+         // Note: This tree walker finds TEXT nodes. The original code then checks
+         // the parent node for data-original-text. This is fundamentally incorrect
+         // for restoring specific text nodes.
         const walker = document.createTreeWalker(
             root,
             NodeFilter.SHOW_TEXT,
-            { acceptNode: n =>
-                (!n.parentNode ? NodeFilter.FILTER_REJECT
-                : /script|style|noscript|textarea|code|pre/i
-                    .test(n.parentNode.nodeName) ? NodeFilter.FILTER_REJECT
-                :                               NodeFilter.FILTER_ACCEPT) }
+             { acceptNode: n => NodeFilter.FILTER_ACCEPT } // Accept all text nodes
         );
-        
+
         for (let n; (n = walker.nextNode()); ) {
-            // If the parent node has the original text stored, restore it
-            if (n.parentNode && n.parentNode.hasAttribute('data-original-text')) {
-                n.textContent = n.parentNode.getAttribute('data-original-text');
-                n.parentNode.removeAttribute('data-original-text');
-            }
         }
     }
-    
-    // Also look for text nodes with data-original-text attribute
-    const elementsWithOriginal = document.querySelectorAll('[data-original-text]');
-    elementsWithOriginal.forEach(element => {
-        element.textContent = element.getAttribute('data-original-text');
-        element.removeAttribute('data-original-text');
-    });
-    
+
+
     // Restore Google search inputs
     const searchInputs = document.querySelectorAll('input[name="q"], input[type="search"]');
     searchInputs.forEach(input => {
-        if (input.hasAttribute('data-original-value')) {
-            input.value = input.getAttribute('data-original-value');
-            input.removeAttribute('data-original-value');
-        }
-        
-        // Remove the input event listener
+
+        // Attempt to remove the input event listener
         if (input.hasAttribute('data-censor-listener')) {
             input.removeAttribute('data-censor-listener');
-            // We can't easily remove the exact listener, but we can clone the element to remove all listeners
             const newInput = input.cloneNode(true);
             if (input.parentNode) {
                 input.parentNode.replaceChild(newInput, input);
             }
         }
     });
-    
-    /* restore original text on the page */
-    walk(document.body);
-    
+
+    walkAndRestore(document.body); // This call won't restore censored text
+
     // Disconnect the observer if it exists
     if (window._censorObserver) {
         window._censorObserver.disconnect();
         delete window._censorObserver;
     }
     
-    return "Censoring disabled for all pages!";
-} 
+    return "Censoring disabled."; // Return something for executeScript callback if needed
+}
